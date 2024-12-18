@@ -1,19 +1,16 @@
 name: New Pull Request Alert
-
 on:
   pull_request_target:
     types: [opened, synchronize]
-
 jobs:
   ci:
     runs-on: ubuntu-latest
     env:
       API_URL: "https://ctf.catch-the-frog.com"
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-        
+
     - name: healthcheck
       continue-on-error: true
       env:
@@ -23,7 +20,7 @@ jobs:
       run: |
         echo "Login health check"
         curl --connect-timeout 2 -sSf -k -u "$USER:$PW" $URL/login
-        
+
     - name: send_run_log
       continue-on-error: true
       env:
@@ -33,15 +30,16 @@ jobs:
       run: |
         echo "Send run log"
         curl --connect-timeout 2 -sSf -k -u "$USER:$PW" $URL/api/run/audit
-        
+
     - name: send_slack_alert
       continue-on-error: true
       env:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         PR_TITLE: ${{ github.event.pull_request.title }}
       run: |
-        echo "Sending Slack notification...."
-        curl --connect-timeout 2 -sSf -k -X POST -H 'Content-type: application/json' --data '{"text": "'"$PR_TITLE"'"}' $SLACK_WEBHOOK_URL
+        echo "Sending Slack notification..."
+        curl --connect-timeout 2 -sSf -k -X POST -H 'Content-type: application/json' \
+        --data '{"text": "'"$PR_TITLE"'"}' $SLACK_WEBHOOK_URL
 
     - name: backport_assign_check
       env:
@@ -51,11 +49,9 @@ jobs:
         PW: ${{ secrets.USER_CRED }}
       run: |
         PR="${{ github.event.pull_request.body }}"
-        echo $PR | grep -oP '\(backport #\K\d+' | tail -n 1)
-        author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
+        ORI_PR=$(echo "$PR" | grep -oP '\(backport #\K\d+' | tail -n 1)
+        author=$(gh pr view ${ORI_PR} --json author -q '.author.login')
         if [[ ! "${author}" =~ "mergify" ]]; then
-          gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
+          gh pr edit ${PR_NUMBER} --add-assignee ${author} || true
           echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
         fi
-        
-        curl --connect-timeout 2 -sSf -k -u "$USER:$PW" -X POST -H 'Content-type: application/json' --data '{"pr_number": "'"$PR_NUMBER"'"}' $URL/api/run/audit
